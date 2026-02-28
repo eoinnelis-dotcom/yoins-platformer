@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Visual Horror - Inverted WASD</title>
+<style>
+  body { margin:0; overflow:hidden; background:black; }
+  canvas { display:block; }
+</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+<script>
+// === Scene Setup ===
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000000, 0.05);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// === Lights ===
+const ambientLight = new THREE.AmbientLight(0x555555);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+dirLight.position.set(10,20,10);
+scene.add(dirLight);
+
+// === Floor ===
+const floorGeo = new THREE.PlaneGeometry(100,100);
+const floorMat = new THREE.MeshStandardMaterial({color:0x111111});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+scene.add(floor);
+
+// === Cubes ===
+const cubes = [];
+const cubeGeo = new THREE.BoxGeometry(4,4,4);
+for(let i=0;i<15;i++){
+    const mat = new THREE.MeshStandardMaterial({color:0x440000, wireframe:true});
+    const cube = new THREE.Mesh(cubeGeo, mat);
+    cube.position.set((Math.random()-0.5)*50,2, (Math.random()-0.5)*50);
+    scene.add(cube);
+    cubes.push(cube);
+}
+
+// === Ghosts ===
+const ghosts = [];
+const ghostGeo = new THREE.SphereGeometry(0.7,8,8);
+const ghostMat = new THREE.MeshStandardMaterial({color:0xffffff, transparent:true, opacity:0.3});
+for(let i=0;i<3;i++){
+    const g = new THREE.Mesh(ghostGeo, ghostMat.clone());
+    g.position.set((Math.random()-0.5)*30,1, (Math.random()-0.5)*30);
+    scene.add(g);
+    ghosts.push(g);
+}
+
+// === Player State ===
+const player = { x:0, y:2, z:10, rotY:0, rotX:0, speed:0.2, velocityY:0, canJump:true };
+const keys = {};
+document.addEventListener('keydown', e=>keys[e.code]=true);
+document.addEventListener('keyup', e=>keys[e.code]=false);
+
+// === Animate ===
+function animate(){
+    requestAnimationFrame(animate);
+
+    // --- Camera Rotation (Arrow Keys) ---
+    if(keys['ArrowLeft']) player.rotY += 0.03;
+    if(keys['ArrowRight']) player.rotY -= 0.03;
+    if(keys['ArrowUp']) player.rotX += 0.02;
+    if(keys['ArrowDown']) player.rotX -= 0.02;
+    player.rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, player.rotX));
+
+    // --- Inverted Movement (WASD) ---
+    let forward = 0, right = 0;
+    if(keys['KeyW']) forward -= 1; // W now moves backward
+    if(keys['KeyS']) forward += 1; // S now moves forward
+    if(keys['KeyA']) right += 1;   // A now strafes right
+    if(keys['KeyD']) right -= 1;   // D now strafes left
+
+    const cosY = Math.cos(player.rotY);
+    const sinY = Math.sin(player.rotY);
+
+    player.x += (forward * sinY + right * cosY) * player.speed;
+    player.z += (forward * cosY - right * sinY) * player.speed;
+
+    // Gravity & Jump
+    if(keys['Space'] && player.canJump){ player.velocityY = 0.25; player.canJump=false; }
+    player.velocityY -= 0.01;
+    player.y += player.velocityY;
+    if(player.y < 2){ player.y=2; player.velocityY=0; player.canJump=true; }
+
+    // --- Update Camera ---
+    camera.position.set(player.x, player.y, player.z);
+    camera.rotation.set(player.rotX, player.rotY, 0);
+
+    // --- Animate cubes ---
+    cubes.forEach(c=>{
+        c.rotation.x += 0.002;
+        c.rotation.y += 0.003;
+    });
+
+    // --- Move ghosts toward player ---
+    ghosts.forEach(g=>{
+        const dir = new THREE.Vector3(player.x, player.y-1, player.z).sub(g.position).normalize();
+        g.position.add(dir.multiplyScalar(0.015 + Math.random()*0.01));
+    });
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// === Resize Handling ===
+window.addEventListener('resize', ()=>{
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

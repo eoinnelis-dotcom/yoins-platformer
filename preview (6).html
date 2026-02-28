@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Kart Endless Runner - Restart Message</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #87ceeb; }
+  canvas { display: block; }
+  #gameOver {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: sans-serif;
+      font-size: 36px;
+      color: red;
+      display: none;
+      text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="gameOver">Crashed!<br>Press R to Restart</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lights
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(10,20,10);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x404040));
+
+// Player Kart
+const playerKartGeometry = new THREE.BoxGeometry(2,1,3);
+const playerKartMaterial = new THREE.MeshPhongMaterial({color:0xff0000});
+const playerKart = new THREE.Mesh(playerKartGeometry, playerKartMaterial);
+playerKart.position.set(0,0.5,0);
+scene.add(playerKart);
+
+// Track Tiles
+const trackWidth = 10;
+const trackLength = 20;
+let tiles = [];
+function addTile(zPos){
+    const geometry = new THREE.BoxGeometry(trackWidth, 0.5, trackLength);
+    const material = new THREE.MeshPhongMaterial({color:0x555555});
+    const tile = new THREE.Mesh(geometry, material);
+    tile.position.set(0, 0, zPos);
+    scene.add(tile);
+    tiles.push(tile);
+}
+for(let i=0;i<10;i++) addTile(i*trackLength);
+
+// Obstacles
+let obstacles = [];
+function spawnObstacle(zPos){
+    const size = Math.random()*1 + 1;
+    const geometry = new THREE.BoxGeometry(size, size, size);
+    const material = new THREE.MeshPhongMaterial({color:0x333333});
+    const obs = new THREE.Mesh(geometry, material);
+    obs.position.set((Math.random()-0.5)*(trackWidth-2), size/2, zPos);
+    scene.add(obs);
+    obstacles.push(obs);
+}
+
+// Ramps
+let ramps = [];
+function spawnRamp(zPos){
+    const geometry = new THREE.BoxGeometry(3,0.5,3);
+    const material = new THREE.MeshPhongMaterial({color:0xffff00});
+    const ramp = new THREE.Mesh(geometry, material);
+    ramp.position.set((Math.random()-0.5)*(trackWidth-2), 0.25, zPos);
+    ramp.rotation.x = -Math.PI/12;
+    scene.add(ramp);
+    ramps.push(ramp);
+}
+
+// Power-ups
+let powerUps = [];
+function spawnPowerUp(zPos){
+    const geometry = new THREE.TetrahedronGeometry(1);
+    const material = new THREE.MeshPhongMaterial({color:0x00ff00});
+    const powerUp = new THREE.Mesh(geometry, material);
+    powerUp.position.set((Math.random()-0.5)*(trackWidth-2), 1, zPos);
+    scene.add(powerUp);
+    powerUps.push(powerUp);
+}
+
+// Controls
+let moveDir = 0;
+window.addEventListener('keydown', e => {
+    if(e.key === 'ArrowLeft') moveDir = -0.5;  
+    if(e.key === 'ArrowRight') moveDir = 0.5;  
+});
+window.addEventListener('keyup', e => {
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight') moveDir = 0;
+});
+
+// Restart key
+window.addEventListener('keydown', e=>{
+    if(e.key.toLowerCase() === 'r'){
+        window.location.reload();
+    }
+});
+
+// Camera
+camera.position.set(0,5,-10);
+
+// Game Over Flag
+let gameOver = false;
+
+// Animate
+let speed = 0.3;
+let jump = 0;
+function animate(){
+    requestAnimationFrame(animate);
+
+    if(!gameOver){
+        // Move player left/right
+        playerKart.position.x += moveDir;
+        if(playerKart.position.x < -trackWidth/2 +1) playerKart.position.x = -trackWidth/2 +1;
+        if(playerKart.position.x > trackWidth/2 -1) playerKart.position.x = trackWidth/2 -1;
+
+        // Move tiles, obstacles, ramps, power-ups
+        tiles.forEach(tile => tile.position.z -= speed);
+        obstacles.forEach(obs => obs.position.z -= speed);
+        ramps.forEach(ramp => ramp.position.z -= speed);
+        powerUps.forEach(p => p.position.z -= speed);
+
+        // Recycle tiles
+        if(tiles[0].position.z < -trackLength){
+            const first = tiles.shift();
+            first.position.z = tiles[tiles.length-1].position.z + trackLength;
+            tiles.push(first);
+        }
+
+        // Randomly spawn obstacles, ramps, power-ups
+        if(Math.random() < 0.02) spawnObstacle(tiles[tiles.length-1].position.z + trackLength/2);
+        if(Math.random() < 0.01) spawnRamp(tiles[tiles.length-1].position.z + trackLength/2);
+        if(Math.random() < 0.005) spawnPowerUp(tiles[tiles.length-1].position.z + trackLength/2);
+
+        // Collision check with obstacles
+        for(let i=0;i<obstacles.length;i++){
+            const obs = obstacles[i];
+            const dx = playerKart.position.x - obs.position.x;
+            const dz = playerKart.position.z - obs.position.z;
+            if(Math.abs(dx)<1.5 && Math.abs(dz)<1.5){
+                gameOver = true;
+                document.getElementById("gameOver").style.display = "block";
+            }
+        }
+
+        // Ramp jump effect
+        ramps.forEach((ramp,i)=>{
+            const dx = playerKart.position.x - ramp.position.x;
+            const dz = playerKart.position.z - ramp.position.z;
+            if(Math.abs(dx)<1.5 && Math.abs(dz)<1.5){
+                jump = 1; 
+                ramps.splice(i,1);
+                scene.remove(ramp);
+            }
+        });
+
+        // Power-up collection
+        powerUps.forEach((p,i)=>{
+            const dx = playerKart.position.x - p.position.x;
+            const dz = playerKart.position.z - p.position.z;
+            if(Math.abs(dx)<1.5 && Math.abs(dz)<1.5){
+                speed += 0.1; 
+                powerUps.splice(i,1);
+                scene.remove(p);
+            }
+        });
+
+        // Apply jump
+        if(jump > 0){
+            playerKart.position.y = 2;
+            jump -= 0.05;
+        } else {
+            playerKart.position.y = 0.5;
+        }
+
+        // Camera in front of player
+        camera.position.z = playerKart.position.z - 10;
+        camera.position.x = playerKart.position.x;
+        camera.position.y = playerKart.position.y + 5;
+        camera.lookAt(playerKart.position);
+    }
+
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
